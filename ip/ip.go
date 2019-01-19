@@ -1,26 +1,8 @@
 package ip
 
 import (
-	"fmt"
 	"net"
-	"strings"
 )
-
-// Get public ip from 8.8.8.8
-func GetPublicIP() string {
-	conn, _ := net.Dial("udp", "8.8.8.8:80")
-	defer conn.Close()
-	localAddr := conn.LocalAddr().String()
-	idx := strings.LastIndex(localAddr, ":")
-	ip := net.ParseIP(localAddr[0:idx])
-	if ip == nil {
-		ip = InputIP()
-	}
-	if !IsPublicIP(ip) {
-		ip = InputIP()
-	}
-	return ip.String()
-}
 
 // Check whether the ip is public
 func IsPublicIP(IP net.IP) bool {
@@ -40,18 +22,4 @@ func IsPublicIP(IP net.IP) bool {
 		}
 	}
 	return false
-}
-
-// Get masternode ip address through user input
-func InputIP() net.IP {
-	var ip_input string
-	fmt.Println("Input your public IP Address: ")
-ERR:
-	fmt.Scanln(&ip_input)
-	ip := net.ParseIP(ip_input)
-	if ip == nil {
-		fmt.Println("Wrong IP Address, Input again: ")
-		goto ERR
-	}
-	return ip
 }

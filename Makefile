@@ -1,11 +1,15 @@
-build: config
+build-windows: config
 	go build ./cmd/ngFuncNode
+	mv ngFuncNode* bin/ 
+
+build-linux: config
+	go build ./cmd/ngFuncNode
+	mv ngFuncNode* bin/
 
 config: fmt
-	go get ./cmd/config2go 
-	config2go > ./cmd/ngFuncNode/config.go
+	go run ./cmd/config2go > ./cmd/ngFuncNode/config.go
 
 fmt:
 	go fmt ./...
 
-target: build
+target: build-windows build-linux

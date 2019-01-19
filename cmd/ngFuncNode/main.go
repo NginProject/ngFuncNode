@@ -4,87 +4,101 @@ package main
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/NginProject/ngFuncNode/ip"
 	"github.com/NginProject/ngFuncNode/ngrpc"
+	"github.com/akamensky/argparse"
 	"github.com/buger/jsonparser"
+	"github.com/jbrodriguez/mlog"
 )
 
 // Submit local masternode config
 func Submit(config *Config, data []byte) {
 	url := config.Server
+	var client = &http.Client{
+		Timeout: time.Second * 6,
+	}
 	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
-		fmt.Println(err)
+		mlog.Warning(err.Error())
 	}
 
 	req.Header = map[string][]string{
 		"Content-Type": {"application/json"},
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		mlog.Warning(err.Error())
 	}
 
 	defer res.Body.Close()
 	body, _ := ioutil.ReadAll(res.Body)
-	status, err := jsonparser.GetString(body, "status")
+	status, err := jsonparser.GetInt(body, "status")
 	if err != nil {
-		fmt.Println(err)
+		mlog.Warning(err.Error())
 	}
 	detail, err := jsonparser.GetString(body, "detail")
 	if err != nil {
-		fmt.Println(err)
+		mlog.Warning(err.Error())
 	}
-	fmt.Println(status)
-	fmt.Println(detail)
+	if status == 0 {
+		mlog.Info(detail)
+	}
 
 }
 
-// TODO: Encrypt the post form
-func Encrypt(text string) (string, error) {
-	key := []byte{0xBA, 0x37, 0x2F, 0x02, 0xC3, 0x92, 0x1F, 0x7D,
-		0x7A, 0x3D, 0x5F, 0x06, 0x41, 0x9B, 0x3F, 0x2D,
-		0xBA, 0x37, 0x2F, 0x02, 0xC3, 0x92, 0x1F, 0x7D,
-		0x7A, 0x3D, 0x5F, 0x06, 0x41, 0x9B, 0x3F, 0x2D,
-	}
-	var iv = key[:aes.BlockSize]
-	encrypted := make([]byte, len(text))
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	encrypter := cipher.NewCFBEncrypter(block, iv)
-	encrypter.XORKeyStream(encrypted, []byte(text))
-	return hex.EncodeToString(encrypted), nil
-}
+// TODO: EncryptJSON GenENode
 
 func main() {
+	mlog.Start(mlog.LevelInfo, "")
+
+	parser := argparse.NewParser("ngFuncNode", "Multi-functional Node Client on Ngin Network")
+
 	config := GetConfig()
+
 	fmt.Println(`Make sure your ngind with rpc is running, if not, run this command: ./ngind --rpc`)
 	fmt.Println(`Make sure your 52520 port is open`)
-	ip_str := ip.GetPublicIP()
+
+	var ip_pstr *string = parser.String("a", "address", &argparse.Options{Required: true, Help: "Your external IP address (reqiured)."})
+
+	err := parser.Parse(os.Args)
+	if err != nil {
+		fmt.Print(parser.Usage(err))
+	}
+
+	net_ip := net.ParseIP(*ip_pstr)
+	if net_ip == nil {
+		mlog.Warning("IP is wrong")
+		os.Exit(0)
+	}
+
+	if !ip.IsPublicIP(net_ip) {
+		mlog.Warning("Your IP is not a legel public address")
+		os.Exit(0)
+	}
+
 	addr, err := ngrpc.GetCoinbase()
 	if err != nil {
-		fmt.Println("Cannot get coinbase from ngind, open new coinbase with command: ./ngind account new")
+		mlog.Warning("Cannot get coinbase from ngind, open new coinbase with command: ./ngind account new")
 		os.Exit(0)
 	}
 
 	data := []byte(`{"ip": "", "address": "", "balance": "" }`)
-	data, err = jsonparser.Set(data, []byte(`"`+ip_str+`"`), "ip")
-	data, err = jsonparser.Set(data, []byte(`"`+addr+`"`), "address")
-	fmt.Println(err)
-	fmt.Println(string(data))
+	if data, err = jsonparser.Set(data, []byte(`"`+*ip_pstr+`"`), "ip"); err != nil {
+		mlog.Warning(err.Error())
+	}
+	if data, err = jsonparser.Set(data, []byte(`"`+addr+`"`), "address"); err != nil {
+		mlog.Warning(err.Error())
+	}
 	balance := &big.Int{}
 	var blockNum uint64
 	balanceChan := make(chan *big.Int)
@@ -100,11 +114,11 @@ func main() {
 		threshold := big.NewInt(int64(10 * int(math.Pow10(18)) * era * 2000))
 		if balance.Cmp(threshold) < 0 {
 			gap := threshold.Sub(threshold, balance)
-			fmt.Println("Balance doesnt reach the threshold. More ", gap, " NG needed")
+			fmt.Println("Balance doesnt reach the threshold. More ", gap, " wei NG needed")
 			os.Exit(0)
 		}
 		data, err = jsonparser.Set(data, []byte(`"`+balance.String()+`"`), "balance")
-		fmt.Println(string(data))
+		//fmt.Println(string(data))
 		Submit(config, data)
 	}
 }
