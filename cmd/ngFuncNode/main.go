@@ -21,7 +21,7 @@ import (
 )
 
 // Submit local masternode config
-func Submit(config *Config, data []byte) {
+func Submit(config * Config, data []byte) {
 	url := config.Server
 	var client = &http.Client{
 		Timeout: time.Second * 6,
@@ -56,7 +56,7 @@ func Submit(config *Config, data []byte) {
 
 }
 
-// TODO: EncryptJSON GenENode
+// TODO: EncryptJSON
 
 func main() {
 	mlog.Start(mlog.LevelInfo, "")
@@ -69,6 +69,9 @@ func main() {
 	fmt.Println(`Make sure your 52520 port is open`)
 
 	var ip_pstr *string = parser.String("a", "address", &argparse.Options{Required: true, Help: "Your external IP address (reqiured)."})
+	var port_pint *int = parser.Int("p", "port", &argparse.Options{Default: 52520, Required: false, Help: "Your external IP port (reqiured)."})
+
+
 
 	err := parser.Parse(os.Args)
 	if err != nil {
@@ -80,9 +83,13 @@ func main() {
 		mlog.Warning("IP is wrong")
 		os.Exit(0)
 	}
-
 	if !ip.IsPublicIP(net_ip) {
 		mlog.Warning("Your IP is not a legel public address")
+		os.Exit(0)
+	}
+
+	if *port_pint > 65535 {
+		fmt.Println("Wrong Port Number")
 		os.Exit(0)
 	}
 
@@ -92,11 +99,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	data := []byte(`{"ip": "", "address": "", "balance": "" }`)
+	enode, err := ngrpc.GetENode(*ip_pstr, *port_pint)
+	if err != nil {
+		mlog.Warning("Cannot get enode address from ngind")
+		os.Exit(0)
+	}
+
+	data := []byte(`{"ip": "", "address": "", "enode": "", "balance": "" }`)
 	if data, err = jsonparser.Set(data, []byte(`"`+*ip_pstr+`"`), "ip"); err != nil {
 		mlog.Warning(err.Error())
 	}
 	if data, err = jsonparser.Set(data, []byte(`"`+addr+`"`), "address"); err != nil {
+		mlog.Warning(err.Error())
+	}
+	if data, err = jsonparser.Set(data, []byte(`"`+enode+`"`), "enode"); err != nil {
 		mlog.Warning(err.Error())
 	}
 	balance := &big.Int{}
