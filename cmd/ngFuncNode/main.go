@@ -21,7 +21,7 @@ import (
 )
 
 // Submit local masternode config
-func Submit(config * Config, data []byte) {
+func Submit(config *Config, data []byte) {
 	url := config.Server
 	var client = &http.Client{
 		Timeout: time.Second * 6,
@@ -70,8 +70,6 @@ func main() {
 
 	var ip_pstr *string = parser.String("a", "address", &argparse.Options{Required: true, Help: "Your external IP address (reqiured)."})
 	var port_pint *int = parser.Int("p", "port", &argparse.Options{Default: 52520, Required: false, Help: "Your external IP port (reqiured)."})
-
-
 
 	err := parser.Parse(os.Args)
 	if err != nil {

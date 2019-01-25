@@ -118,7 +118,7 @@ func GetENode(ip string, port int) (string, error) {
 	}
 	req_json := &GetCoinbaseJson{
 		Jsonrpc: "2.0",
-		Method:  "ngin_nodeInfo",
+		Method:  "admin_nodeInfo",
 		Params:  []string{},
 		Id:      0,
 	}
@@ -146,5 +146,5 @@ func GetENode(ip string, port int) (string, error) {
 		return "", err
 	}
 	enode := "enode://" + id + "@" + ip + ":" + string(port)
-	return enode, nil	
+	return enode, nil
 }
