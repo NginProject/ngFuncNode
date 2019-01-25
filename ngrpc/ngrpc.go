@@ -46,7 +46,9 @@ func GetCoinbase() (string, error) {
 		fmt.Println(err)
 		return "", err
 	}
-	defer res.Body.Close()
+	if err != nil {
+		res.Body.Close()
+	}
 	body, _ := ioutil.ReadAll(res.Body)
 	addr, err := jsonparser.GetString(body, "result")
 	if err != nil {
@@ -74,7 +76,9 @@ func GetBalance(addr string, balanceChan chan *big.Int) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		defer res.Body.Close()
+		if err != nil {
+			res.Body.Close()
+		}
 		body, _ := ioutil.ReadAll(res.Body)
 		json, _, _, _ := jsonparser.Get(body, "result")
 		i := new(big.Int)
@@ -102,7 +106,9 @@ func GetBlockNum(blockNumChan chan uint64) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		defer res.Body.Close()
+		if err != nil {
+			res.Body.Close()
+		}
 		body, _ := ioutil.ReadAll(res.Body)
 		json, _, _, _ := jsonparser.Get(body, "result")
 		i, _ := strconv.ParseUint(string(json)[2:], 16, 32)
@@ -137,7 +143,9 @@ func GetENode(ip string, port int) (string, error) {
 		fmt.Println(err)
 		return "", err
 	}
-	defer res.Body.Close()
+	if err != nil {
+		res.Body.Close()
+	}
 	body, _ := ioutil.ReadAll(res.Body)
 	id, err := jsonparser.GetString(body, "result", "id")
 	if err != nil {

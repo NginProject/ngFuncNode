@@ -40,7 +40,9 @@ func Submit(config *Config, data []byte) {
 		mlog.Warning(err.Error())
 	}
 
-	defer res.Body.Close()
+	if err != nil {
+		res.Body.Close()
+	}
 	body, _ := ioutil.ReadAll(res.Body)
 	status, err := jsonparser.GetInt(body, "status")
 	if err != nil {
