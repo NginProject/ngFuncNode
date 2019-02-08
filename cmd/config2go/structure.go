@@ -8,33 +8,37 @@ import (
 	"log"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/c9s/inflect"
 	"github.com/go-openapi/swag"
 )
 
-type ObjectType uint
-
 const (
-	Invalid ObjectType = iota
-	Value
-	Hash
-	Array
+	// invalid
+	invalid uint = iota
+	value
+	hash
+	array
 )
 
 const (
-	rootID            = "$"
-	DefaultStructName = "data"
+	rootID = "$"
+
+	// DefaultStructName is the default name of new struct
+	DefaultStructName = "config"
 )
 
 var debugMode bool
 var option Options
 
+// SetDebug is whether show the bug message
 func SetDebug(v bool) {
 	debugMode = v
 }
 
+// Options will be used on Parse function
 type Options struct {
 	UseOmitempty   bool
 	UseShortStruct bool
@@ -45,6 +49,7 @@ type Options struct {
 	Suffix         string
 }
 
+// Parse is the main function to generate the golang struct code
 func Parse(reader io.Reader, opt Options) (string, error) {
 	var input interface{}
 	if err := json.NewDecoder(reader).Decode(&input); err != nil {
@@ -59,22 +64,28 @@ func Parse(reader io.Reader, opt Options) (string, error) {
 	walker := NewWalker(input)
 	walker.start()
 	// if debugMode {
-	// b, _ := json.MarshalIndent(walker.structure, "", "  ")
+	// b, _ := json.MarshalIndent(Walker.structure, "", "  ")
 	initCode := `
 func GetConfig() *Config {
 	config := &Config{}
 `
-	for i, _ := range walker.structure.Props {
-		// fmt.Println(walker.structure.Props[i].Value)
+	for i := range walker.structure.Props {
+		// fmt.Println(Walker.structure.Props[i].value)
 		key := strings.Title(walker.structure.Props[i].Name)
-		// if reflect.ValueOf(walker.structure.Props[i].Value).Kind() == reflect.String {
-		val := strings.Title(walker.structure.Props[i].Value.(string))
-		// }
-		initCode = initCode + `
+		if reflect.ValueOf(walker.structure.Props[i].value).Kind() == reflect.String {
+			val := strings.Title(walker.structure.Props[i].value.(string))
+			initCode = initCode + `
 	config.` + key + "=" + `"` + val + `"
-`
+			`
+		}
+		if reflect.ValueOf(walker.structure.Props[i].value).Kind() == reflect.Float64 {
+			val := strconv.FormatFloat(walker.structure.Props[i].value.(float64), 'f', -1, 64)
+			initCode = initCode + `
+	config.` + key + "=" + val + "\n"
+		}
+
 	}
-	// walker.logln(string(b))
+	// Walker.logln(string(b))
 	// }
 	initCode = initCode + `
 	return config
@@ -84,12 +95,14 @@ func GetConfig() *Config {
 
 }
 
+// Walker will traverse all branch of structure
 type Walker struct {
 	root      interface{}
 	nest      int
 	structure *Structure
 }
 
+// NewWalker to get a Walker object
 func NewWalker(root interface{}) *Walker {
 	return &Walker{
 		root: root,
@@ -128,7 +141,7 @@ func (w *Walker) walk(spath, name string, data interface{}, parent *Structure) {
 	}
 
 	switch getType(data) {
-	case Value:
+	case value:
 		v := reflect.ValueOf(data)
 		kind := v.Kind()
 		if kind == reflect.Float64 {
@@ -136,7 +149,7 @@ func (w *Walker) walk(spath, name string, data interface{}, parent *Structure) {
 		}
 		w.logln(name, kind)
 		parent.AddPropety(name, kind, v.Interface(), nil)
-	case Array:
+	case array:
 		spath = fmt.Sprintf("%s[]", spath)
 		w.logln(name)
 		w.logln("[")
@@ -152,7 +165,7 @@ func (w *Walker) walk(spath, name string, data interface{}, parent *Structure) {
 			parent.AddPropety(name, reflect.Array, list, current)
 		}
 		w.logln("]")
-	case Hash:
+	case hash:
 		current := NewStructure(spath, name)
 		w.logln(name)
 		w.logln("{")
@@ -166,27 +179,31 @@ func (w *Walker) walk(spath, name string, data interface{}, parent *Structure) {
 		} else {
 			parent.AddPropety(name, reflect.Map, nil, current)
 		}
-	case Invalid:
+	case invalid:
 		parent.AddPropety(name, reflect.Interface, nil, nil)
 	}
 	return
 }
 
+// Structure is the struct
 type Structure struct {
 	ID    string
 	Name  string
 	Props Props
 }
 
-type Props []Propety
+// Props is a list of the properties in structure
+type Props []Property
 
-type Propety struct {
+// Property is the property of structure
+type Property struct {
 	Name  string
 	Kind  reflect.Kind
-	Value interface{}
+	value interface{}
 	Refs  *Structure `json:",omitempty"`
 }
 
+// NewStructure return a new structure
 func NewStructure(spath, name string) *Structure {
 	if !option.UseShortStruct {
 		name = SpathToName(spath, name)
@@ -198,10 +215,11 @@ func NewStructure(spath, name string) *Structure {
 	return &Structure{
 		ID:    spath,
 		Name:  name,
-		Props: make([]Propety, 0, 8),
+		Props: make([]Property, 0, 8),
 	}
 }
 
+// SpathToName convert th spath to name
 func SpathToName(spath, name string) string {
 	args := strings.Split(spath, ".")
 	result := make([]string, 0, len(args))
@@ -220,6 +238,7 @@ func SpathToName(spath, name string) string {
 	return strings.Join(result, "")
 }
 
+// AddPropety will add a property to the structure
 func (s *Structure) AddPropety(name string, kind reflect.Kind, val interface{}, refs *Structure) {
 	for i, prop := range s.Props {
 		if prop.Name != name {
@@ -228,12 +247,12 @@ func (s *Structure) AddPropety(name string, kind reflect.Kind, val interface{}, 
 		// float64 > int
 		if prop.Kind == reflect.Float64 && kind == reflect.Int ||
 			prop.Kind == reflect.Int && kind == reflect.Float64 {
-			s.Props[i] = Propety{Name: name, Kind: reflect.Float64}
+			s.Props[i] = Property{Name: name, Kind: reflect.Float64}
 			return
 		}
 		// other kinds -> interface
 		if prop.Kind != kind {
-			s.Props[i] = Propety{Name: name, Kind: reflect.Interface}
+			s.Props[i] = Property{Name: name, Kind: reflect.Interface}
 			return
 		}
 		// merge map pops
@@ -247,7 +266,7 @@ func (s *Structure) AddPropety(name string, kind reflect.Kind, val interface{}, 
 		}
 		return
 	}
-	prop := Propety{Name: name, Kind: kind, Value: val}
+	prop := Property{Name: name, Kind: kind, value: val}
 	if refs != nil {
 		prop.Refs = refs
 	}
@@ -255,6 +274,7 @@ func (s *Structure) AddPropety(name string, kind reflect.Kind, val interface{}, 
 	sort.Sort(s.Props)
 }
 
+// Output will return a list of string
 func (s *Structure) Output() []string {
 	refs := s.Refs()
 	result := make([]string, 0, 8)
@@ -267,6 +287,7 @@ func (s *Structure) Output() []string {
 	return result
 }
 
+// String will format the structure to a string
 func (s *Structure) String() string {
 	props := make([]string, len(s.Props))
 	for i, prop := range s.Props {
@@ -281,6 +302,7 @@ func (s *Structure) String() string {
 	return string(formated)
 }
 
+// Refs return a list of ref(point) to the Structure object
 func (s *Structure) Refs() []*Structure {
 	refs := make([]*Structure, 0, len(s.Props))
 	for _, v := range s.Props {
@@ -296,7 +318,8 @@ func (s *Structure) Refs() []*Structure {
 	return refs
 }
 
-func (p *Propety) String() string {
+// String format the Property into a string
+func (p *Property) String() string {
 	kind := "interface{}"
 	isStruct := false
 	switch p.Kind {
@@ -329,17 +352,17 @@ func (p *Propety) String() string {
 		jsonOption = ",omitempty"
 	}
 	exampleOption := ""
-	if option.UseExample && p.Value != nil && !isStruct {
-		list, ok := p.Value.([]interface{})
+	if option.UseExample && p.value != nil && !isStruct {
+		list, ok := p.value.([]interface{})
 		if ok {
 			strs := make([]string, len(list))
 			for i, v := range list {
 				strs[i] = fmt.Sprint(v)
 			}
-			p.Value = strings.Join(strs, ",")
+			p.value = strings.Join(strs, ",")
 		}
-		if p.Value != "" {
-			exampleOption = fmt.Sprintf(" example:\"%v\"", p.Value)
+		if p.value != "" {
+			exampleOption = fmt.Sprintf(" example:\"%v\"", p.value)
 		}
 	}
 	propName := swag.ToGoName(p.Name)
@@ -361,17 +384,17 @@ func (p Props) Less(i, j int) bool {
 	return p[i].Name < p[j].Name
 }
 
-func getType(data interface{}) ObjectType {
+func getType(data interface{}) uint {
 	v := reflect.ValueOf(data)
 	switch v.Kind() {
 	case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr, reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
-		return Value
+		return value
 	case reflect.Slice, reflect.Array:
-		return Array
+		return array
 	case reflect.Map:
-		return Hash
+		return hash
 	default:
-		return Invalid
+		return invalid
 	}
 }
 
@@ -383,8 +406,4 @@ func getNumberKind(f float64) reflect.Kind {
 		return reflect.Int
 	}
 	return reflect.Float64
-}
-
-func Instance() {
-
 }

@@ -1,3 +1,6 @@
+// Package ngrpc:
+// ngrpc is a simple ngFuncNode's library to call some ngind jsonrpc
+
 package ngrpc
 
 import (
@@ -13,30 +16,58 @@ import (
 	"github.com/buger/jsonparser"
 )
 
-type GetCoinbaseJson struct {
+// LocalNgindRPCClient is one ngind intance in local machine
+type LocalNgindRPCClient struct {
+	Schema string
+	Host   string
+	Port   int
+}
+
+// StrListParamsReq is the jsonrpc request with string list params
+type StrListParamsReq struct {
 	Jsonrpc string   `json:"jsonrpc"`
 	Method  string   `json:"method"`
 	Params  []string `json:"params"`
-	Id      int      `json:"id"`
+	ID      int      `json:"id"`
 }
 
-func GetCoinbase() (string, error) {
-	url := "http://127.0.0.1:52521"
+// New a LocalNgindRpc
+func New(schema, host string, port int) *LocalNgindRPCClient {
+	if schema != "https" {
+		schema = "http"
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	if port <= 0 || port > 65535 {
+		port = 52521
+	}
+	return &LocalNgindRPCClient{
+		Schema: schema,
+		Host:   host,
+		Port:   port,
+	}
+
+}
+
+// GetCoinbase will get string-type coinbase from local ngind
+func (n *LocalNgindRPCClient) GetCoinbase() (string, error) {
+	url := n.Schema + "://" + n.Host + ":" + strconv.Itoa(n.Port)
 	var client = &http.Client{
 		Timeout: time.Second * 6,
 	}
-	req_json := &GetCoinbaseJson{
+	reqJSON := &StrListParamsReq{
 		Jsonrpc: "2.0",
 		Method:  "ngin_coinbase",
 		Params:  []string{},
-		Id:      0,
+		ID:      0,
 	}
-	req_body, err := json.Marshal(req_json)
+	reqBody, err := json.Marshal(reqJSON)
 	if err != nil {
 		fmt.Println(err)
 		return "", err
 	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(req_body))
+	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
 		fmt.Println(err)
 		return "", err
@@ -58,82 +89,79 @@ func GetCoinbase() (string, error) {
 	return addr, nil
 }
 
-func GetBalance(addr string, balanceChan chan *big.Int) {
-	for {
-		url := "http://127.0.0.1:52521"
-		var client = &http.Client{
-			Timeout: time.Second * 6,
-		}
-		req_json := &GetCoinbaseJson{
-			Jsonrpc: "2.0",
-			Method:  "ngin_getBalance",
-			Params:  []string{addr, "latest"},
-			Id:      0,
-		}
-		req_body, _ := json.Marshal(req_json)
-		req, _ := http.NewRequest("POST", url, bytes.NewReader(req_body))
-		res, err := client.Do(req)
-		if err != nil {
-			fmt.Println(err)
-		}
-		if err != nil {
-			res.Body.Close()
-		}
-		body, _ := ioutil.ReadAll(res.Body)
-		json, _, _, _ := jsonparser.Get(body, "result")
-		i := new(big.Int)
-		i.SetString(string(json)[2:], 16)
-		balanceChan <- i
-		time.Sleep(6 * time.Second)
-	}
-}
-
-func GetBlockNum(blockNumChan chan uint64) {
-	for {
-		url := "http://127.0.0.1:52521"
-		var client = &http.Client{
-			Timeout: time.Second * 6,
-		}
-		req_json := &GetCoinbaseJson{
-			Jsonrpc: "2.0",
-			Method:  "ngin_blockNumber",
-			Params:  []string{},
-			Id:      0,
-		}
-		req_body, _ := json.Marshal(req_json)
-		req, _ := http.NewRequest("POST", url, bytes.NewReader(req_body))
-		res, err := client.Do(req)
-		if err != nil {
-			fmt.Println(err)
-		}
-		if err != nil {
-			res.Body.Close()
-		}
-		body, _ := ioutil.ReadAll(res.Body)
-		json, _, _, _ := jsonparser.Get(body, "result")
-		i, _ := strconv.ParseUint(string(json)[2:], 16, 32)
-		blockNumChan <- i
-		time.Sleep(6 * time.Second)
-	}
-}
-
-func GetENode(ip string, port int) (string, error) {
-	url := "http://127.0.0.1:52521"
+// GetBalance will get the account's balance from local ngind
+func (n *LocalNgindRPCClient) GetBalance(account string) *big.Int {
+	url := n.Schema + "://" + n.Host + ":" + strconv.Itoa(n.Port)
 	var client = &http.Client{
 		Timeout: time.Second * 6,
 	}
-	req_json := &GetCoinbaseJson{
+	reqJSON := &StrListParamsReq{
+		Jsonrpc: "2.0",
+		Method:  "ngin_getBalance",
+		Params:  []string{account, "latest"},
+		ID:      0,
+	}
+	reqBody, _ := json.Marshal(reqJSON)
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if err != nil {
+		res.Body.Close()
+	}
+	body, _ := ioutil.ReadAll(res.Body)
+	json, _, _, _ := jsonparser.Get(body, "result")
+	i := new(big.Int)
+	i.SetString(string(json)[2:], 16)
+	return i
+}
+
+// GetBlockNum will get the latest block number for local ngind
+func (n *LocalNgindRPCClient) GetBlockNum() uint64 {
+	url := n.Schema + "://" + n.Host + ":" + strconv.Itoa(n.Port)
+	var client = &http.Client{
+		Timeout: time.Second * 6,
+	}
+	reqJSON := &StrListParamsReq{
+		Jsonrpc: "2.0",
+		Method:  "ngin_blockNumber",
+		Params:  []string{},
+		ID:      0,
+	}
+	reqBody, _ := json.Marshal(reqJSON)
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if err != nil {
+		res.Body.Close()
+	}
+	body, _ := ioutil.ReadAll(res.Body)
+	json, _, _, _ := jsonparser.Get(body, "result")
+	i, _ := strconv.ParseUint(string(json)[2:], 16, 32)
+	return i
+}
+
+// GetENode returns "enode://[key]@[ip]:[port]"
+func (n *LocalNgindRPCClient) GetENode(ip string, port int) (string, error) {
+	url := n.Schema + "://" + n.Host + ":" + strconv.Itoa(n.Port)
+	var client = &http.Client{
+		Timeout: time.Second * 6,
+	}
+	reqJSON := &StrListParamsReq{
 		Jsonrpc: "2.0",
 		Method:  "admin_nodeInfo",
 		Params:  []string{},
-		Id:      0,
+		ID:      0,
 	}
-	req_body, err := json.Marshal(req_json)
+	reqBody, err := json.Marshal(reqJSON)
 	if err != nil {
 		fmt.Println(err)
 		return "", err
 	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(req_body))
+	req, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
 		fmt.Println(err)
 		return "", err
@@ -150,9 +178,25 @@ func GetENode(ip string, port int) (string, error) {
 	id, err := jsonparser.GetString(body, "result", "id")
 	if err != nil {
 		fmt.Println(err)
-		fmt.Println("Remember to run with `--rpcapi admin ...`")
+		fmt.Println("Remember to run with `--rpcapi admin,ngin,net,web3`")
 		return "", err
 	}
-	enode := "enode://" + id + "@" + ip + ":" + string(port)
+	enode := "enode://" + id + "@" + ip + ":" + strconv.Itoa(port)
 	return enode, nil
+}
+
+// Balance2Chan send balance to *big.Int channel
+func (n *LocalNgindRPCClient) Balance2Chan(addr string, balanceChan chan *big.Int) {
+	for {
+		balanceChan <- n.GetBalance(addr)
+		time.Sleep(6 * time.Second)
+	}
+}
+
+// BlockNum2Chan send block number to uint64 channel
+func (n *LocalNgindRPCClient) BlockNum2Chan(blockNumChan chan uint64) {
+	for {
+		blockNumChan <- n.GetBlockNum()
+		time.Sleep(6 * time.Second)
+	}
 }

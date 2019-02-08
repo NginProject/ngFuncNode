@@ -2,4 +2,4 @@
 config.go
 config.json
 .idea
-bin/*
+bin
